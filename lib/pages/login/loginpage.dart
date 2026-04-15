@@ -13,111 +13,73 @@ class Loginpage extends StatefulWidget {
 class _LoginpageState extends State<Loginpage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
 
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+
+  // 🔐 LOGIN EMAIL
   Future<void> _connecter() async {
-    if (_emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Remplissez tous les champs."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showSnack("Remplissez tous les champs", Colors.orange);
       return;
     }
 
-    setState(() => _isLoading = true);
-
     try {
+      setState(() => _isLoading = true);
+
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        email: email,
+        password: password,
       );
-      // AuthGate redirige automatiquement ✅
+
+       if (mounted) {
+      Navigator.pushReplacementNamed(context, '/home');
+    }
 
     } on FirebaseAuthException catch (e) {
-      String message = e.message ?? "Une erreur est survenue.";
-      if (e.code == 'user-not-found') message = "Aucun compte trouvé.";
-      if (e.code == 'wrong-password') message = "Mot de passe incorrect.";
-      if (e.code == 'invalid-email') message = "Email invalide.";
-      if (e.code == 'invalid-credential') message = "Email ou mot de passe incorrect.";
-      if (e.code == 'too-many-requests') message = "Trop de tentatives. Réessayez plus tard.";
+      String message = "Erreur";
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (e.code == 'user-not-found') message = "Aucun compte trouvé";
+      if (e.code == 'wrong-password') message = "Mot de passe incorrect";
+      if (e.code == 'invalid-email') message = "Email invalide";
+      if (e.code == 'too-many-requests') message = "Trop de tentatives";
+
+      _showSnack(message, Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _motDePasseOublie() async {
-    if (_emailController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Entrez votre email d'abord."),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: _emailController.text.trim(),
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Email de réinitialisation envoyé ✅"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message ?? "Erreur."),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
+  // 🔐 GOOGLE
   Future<void> _connecterGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return;
+      final user = await GoogleSignIn().signIn();
+      if (user == null) return;
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      final auth = await user.authentication;
 
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+        accessToken: auth.accessToken,
+        idToken: auth.idToken,
       );
 
       await FirebaseAuth.instance.signInWithCredential(credential);
-      // AuthGate redirige automatiquement ✅
-
-    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Erreur Google : $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+  Navigator.pushReplacementNamed(context, '/home');
+}
+    } catch (e) {
+      _showSnack("Erreur Google", Colors.red);
     }
+  }
+
+  // 🔔 SNACKBAR
+  void _showSnack(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
   }
 
   @override
@@ -127,226 +89,215 @@ class _LoginpageState extends State<Loginpage> {
     super.dispose();
   }
 
+  // 🎨 UI
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        image: DecorationImage(
-          image: AssetImage("assets/images/marron.jpg"),
-          fit: BoxFit.cover,
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 70),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                child: Column(
-                  children: [
-                    Text(
-                      "Ravi de vous revoir",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).primaryColor,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      "Connectez-vous pour continuer",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: "Poppins-Bold",
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+    return Scaffold(
+      body: Stack(
+        children: [
+          // 🌄 Background
+          Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage("assets/images/marron.jpg"),
+                fit: BoxFit.cover,
               ),
-              Expanded(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(20),
-                      topLeft: Radius.circular(20),
+            ),
+          ),
+
+          // 🔥 Overlay
+          Container(
+            color: Colors.black.withOpacity(0.6),
+          ),
+
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const SizedBox(height: 60),
+
+                  // 🏷️ TITRE
+                  Text(
+                    "GoTime",
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColor,
                     ),
                   ),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 20),
-                    child: Column(
+
+                  const SizedBox(height: 10),
+
+                  const Text(
+                    "Connecte-toi pour continuer",
+                    style: TextStyle(color: Colors.white),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // 📧 EMAIL
+                  TextField(
+                    controller: _emailController,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: InputDecoration(
+                      labelText: "Email",
+                      labelStyle: const TextStyle(color: Colors.black),
+                      prefixIcon:
+                          const Icon(Icons.email, color: Colors.black),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.black),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 🔒 PASSWORD
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: InputDecoration(
+                      labelText: "Mot de passe",
+                      labelStyle: const TextStyle(color: Colors.black),
+                      prefixIcon:
+                          const Icon(Icons.lock, color: Colors.black),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                          color: Colors.black,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.white),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // 🔑 FORGOT PASSWORD
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/forgot-password');
+                      },
+                      child: const Text(
+                        "Mot de passe oublié ?",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 🔥 LOGIN BUTTON
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _connecter,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                      backgroundColor: Theme.of(context).primaryColor,
+                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator(
+                            color: Colors.white)
+                        : const Text("Se connecter"),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ➖ DIVIDER
+                  const Row(
+                    children: [
+                      Expanded(child: Divider(color: Colors.white)),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Text("ou",
+                            style: TextStyle(color: Colors.white)),
+                      ),
+                      Expanded(child: Divider(color: Colors.white)),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 🔵 GOOGLE BUTTON
+                  ElevatedButton(
+                    onPressed: _connecterGoogle,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: Colors.grey),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(height: 14),
-
-                        // Champ Email
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration:
-                              const InputDecoration(labelText: "Mail"),
+                        Image.asset(
+                          'assets/logos/google.png',
+                          height: 24, // ✅ taille correcte (pas 10)
+                          width: 24,
                         ),
-                        const SizedBox(height: 14),
-
-                        // Champ Mot de passe
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                              labelText: "Mot de passe"),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Mot de passe oublié
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            GestureDetector(
-                              onTap: _motDePasseOublie,
-                              child: const Text(
-                                "Mot de passe oublié ?",
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Bouton Se connecter
-                        GestureDetector(
-                          onTap: _isLoading ? null : _connecter,
-                          child: Container(
-                            width: double.infinity,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              color: Theme.of(context).primaryColor,
-                            ),
-                            child: Center(
-                              child: _isLoading
-                                  ? const CircularProgressIndicator(
-                                      color: Colors.white)
-                                  : const Text(
-                                      "Se connecter",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Lien vers Signup
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const Signuppage(),
-                              ),
-                            );
-                          },
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text("Vous êtes nouveau ? ",
-                                  style: TextStyle(color: Colors.white)),
-                              Text(
-                                "S'inscrire",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Theme.of(context).primaryColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        const Row(
-                          children: [
-                            Expanded(
-                                child: Divider(
-                                    thickness: 0.5, color: Colors.white)),
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 8),
-                              child: Text("ou",
-                                  style: TextStyle(color: Colors.white)),
-                            ),
-                            Expanded(
-                                child: Divider(
-                                    thickness: 0.5, color: Colors.white)),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Bouton Google ✅
-                        GestureDetector(
-                          onTap: _connecterGoogle,
-                          child: Container(
-                            width: double.infinity,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              color: Colors.grey[100],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                    width: 30,
-                                    child: Image.asset(
-                                        "assets/logos/google.png")),
-                                const SizedBox(width: 12),
-                                const Text("Continuer avec Google",
-                                    style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Bouton Apple
-                        Container(
-                          width: double.infinity,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            color: Colors.grey[100],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                  width: 30,
-                                  child: Image.asset(
-                                      "assets/logos/téléchargement (1).png")),
-                              const SizedBox(width: 12),
-                              const Text("Continuer avec Apple",
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold)),
-                            ],
+                        const SizedBox(width: 12),
+                        const Text(
+                          "Continuer avec Google",
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+
+                  const SizedBox(height: 20),
+
+                  // 📝 SIGNUP
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        "Pas de compte ? ",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const Signuppage(),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          "S'inscrire",
+                          style: TextStyle(
+                            color: Theme.of(context).primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

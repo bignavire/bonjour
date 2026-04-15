@@ -11,10 +11,12 @@ import 'package:gotime/pages/notification_service.dart';
 import 'package:gotime/lib/models/activity.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:gotime/lib/models/user_preferences.dart';
-import 'package:gotime/lib/services/recommendation_engine.dart';
-import 'package:gotime/lib/services/weather_service.dart';
-import 'package:gotime/lib/services/places_service.dart';
+import 'package:gotime/services/recommendation_engine.dart';
+import 'package:gotime/services/weather_service.dart';
+import 'package:gotime/services/places_service.dart';
 import 'dart:async';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:gotime/pages/map_page.dart'; // ← NOUVEAU
 
 class Pageaccueil extends StatefulWidget {
   const Pageaccueil({super.key});
@@ -26,12 +28,32 @@ class Pageaccueil extends StatefulWidget {
 class _PageaccueilState extends State<Pageaccueil> {
   int selectedIndex = 0;
 
-  final List<Widget> pages = [
-    const _HomeContent(),
-    const CalendarPage(),
-    const StatsPage(),
-    const ProfilePage(),
-  ];
+  // ── Activité sélectionnée depuis l'accueil ──
+  double? _mapTargetLat;
+  double? _mapTargetLng;
+  String? _mapTargetName;
+
+  /// Appelé depuis _HomeContent quand on tape sur une activité
+  void _goToMap(double lat, double lng, String name) {
+    setState(() {
+      _mapTargetLat = lat;
+      _mapTargetLng = lng;
+      _mapTargetName = name;
+      selectedIndex = 4; // onglet Map
+    });
+  }
+
+  List<Widget> get _pages => [
+        _HomeContent(onActivityTap: _goToMap),
+        const CalendarPage(),
+        const StatsPage(),
+        const ProfilePage(),
+        MapPage(
+          targetLat: _mapTargetLat,
+          targetLng: _mapTargetLng,
+          targetName: _mapTargetName,
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -44,13 +66,14 @@ class _PageaccueilState extends State<Pageaccueil> {
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: pages[selectedIndex],
+        body: IndexedStack(
+          index: selectedIndex,
+          children: _pages,
+        ),
         bottomNavigationBar: _BottomNav(
           selectedIndex: selectedIndex,
           onItemTap: (index) {
-            setState(() {
-              selectedIndex = index;
-            });
+            setState(() => selectedIndex = index);
           },
         ),
       ),
@@ -58,8 +81,13 @@ class _PageaccueilState extends State<Pageaccueil> {
   }
 }
 
+// ── Callback typedef ──
+typedef ActivityTapCallback = void Function(
+    double lat, double lng, String name);
+
 class _HomeContent extends StatelessWidget {
-  const _HomeContent();
+  final ActivityTapCallback onActivityTap;
+  const _HomeContent({required this.onActivityTap});
 
   @override
   Widget build(BuildContext context) {
@@ -74,14 +102,14 @@ class _HomeContent extends StatelessWidget {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  children: const [
-                    _TachesCard(),
-                    SizedBox(height: 14),
-                    _EnvieButton(),
-                    SizedBox(height: 14),
-                    _SuggestionsSection(),
-                    SizedBox(height: 14),
-                    _ProcheDeToiCard(),
+                  children: [
+                    const _TachesCard(),
+                    const SizedBox(height: 14),
+                    const _EnvieButton(),
+                    const SizedBox(height: 14),
+                    _SuggestionsSection(onActivityTap: onActivityTap),
+                    const SizedBox(height: 14),
+                    _ProcheDeToiCard(onActivityTap: onActivityTap),
                   ],
                 ),
               ),
@@ -149,7 +177,9 @@ class _HeaderState extends State<_Header> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final nom = user?.displayName ?? "Utilisateur";
+    final nom = user?.displayName ?? user?.email?.split('@')[0] ?? 'Visiteur';
+    final isVisiteur = user == null;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 36, 20, 20),
       child: Column(
@@ -162,32 +192,77 @@ class _HeaderState extends State<_Header> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(_meteo,
-                      style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                      style:
+                          const TextStyle(fontSize: 13, color: Colors.white70)),
                   Text(_heure,
                       style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
                 ],
               ),
-              GestureDetector(
-                onTap: () async => await FirebaseAuth.instance.signOut(),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.logout, color: Colors.white, size: 18),
-                ),
-              ),
+             GestureDetector(
+  onTap: () {
+    Future.microtask(() {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const ProfilePage(),
+        ),
+      );
+    });
+  },
+  child: Container(
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.2),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: const Icon(
+      Icons.person,
+      color: Colors.white,
+      size: 18,
+    ),
+  ),
+),
             ],
           ),
           const SizedBox(height: 12),
-          Text('$_salutation, $nom 👋',
-              style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text(
+            isVisiteur ? 'Bonjour, Visiteur 👋' : '$_salutation, $nom 👋',
+            style: const TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
           const SizedBox(height: 2),
-          const Text('Que fais-tu aujourd\'hui ?',
-              style: TextStyle(fontSize: 13, color: Colors.white70)),
+          Text(
+            isVisiteur
+                ? 'Connecte-toi pour accéder à plus de fonctionnalités'
+                : 'Que fais-tu aujourd\'hui ?',
+            style: TextStyle(
+                fontSize: 13,
+                color: Colors.white.withOpacity(isVisiteur ? 0.6 : 0.8)),
+          ),
+          if (isVisiteur) ...[
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => Navigator.pushReplacementNamed(context, '/auth'),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  '🔓 Se connecter',
+                  style: TextStyle(
+                    color: Color(0xFFD85A30),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -216,8 +291,8 @@ class _TachesCardState extends State<_TachesCard> {
     if (data != null) {
       Map<String, dynamic> decoded = jsonDecode(data);
       TaskData.tasks = decoded.map((key, value) {
-        return MapEntry(DateTime.parse(key),
-            List<Map<String, dynamic>>.from(value));
+        return MapEntry(
+            DateTime.parse(key), List<Map<String, dynamic>>.from(value));
       });
     }
     final today = DateTime.now();
@@ -245,11 +320,15 @@ class _TachesCardState extends State<_TachesCard> {
             children: [
               Text('Tâches du jour 📋',
                   style: TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: textColor)),
               Text(
                 '${_tasks.where((t) => t["done"] == true).length}/${_tasks.length}',
                 style: const TextStyle(
-                    color: Color(0xFFD85A30), fontWeight: FontWeight.bold, fontSize: 13),
+                    color: Color(0xFFD85A30),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13),
               ),
             ],
           ),
@@ -264,7 +343,8 @@ class _TachesCardState extends State<_TachesCard> {
                   child: Row(
                     children: [
                       Container(
-                        width: 20, height: 20,
+                        width: 20,
+                        height: 20,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: task["done"]
@@ -277,7 +357,8 @@ class _TachesCardState extends State<_TachesCard> {
                               width: 2),
                         ),
                         child: task["done"]
-                            ? const Icon(Icons.check, color: Colors.white, size: 12)
+                            ? const Icon(Icons.check,
+                                color: Colors.white, size: 12)
                             : null,
                       ),
                       const SizedBox(width: 10),
@@ -335,7 +416,7 @@ class _EnvieButtonState extends State<_EnvieButton>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 150));
+        vsync: this, duration: const Duration(milliseconds: 150));
     _scale = Tween<double>(begin: 1.0, end: 0.92).animate(
         CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
@@ -375,8 +456,9 @@ class _EnvieButtonState extends State<_EnvieButton>
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFD85A30).withOpacity(0.35),
-                    blurRadius: 12, offset: const Offset(0, 5)),
+                      color: const Color(0xFFD85A30).withOpacity(0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5)),
                 ],
               ),
               child: const Row(
@@ -404,11 +486,13 @@ class _EnvieButtonState extends State<_EnvieButton>
             decoration: BoxDecoration(
               color: const Color(0xFFD85A30).withOpacity(0.08),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD85A30).withOpacity(0.3)),
+              border:
+                  Border.all(color: const Color(0xFFD85A30).withOpacity(0.3)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.bolt_rounded, color: Color(0xFFD85A30), size: 20),
+                const Icon(Icons.bolt_rounded,
+                    color: Color(0xFFD85A30), size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(_suggestion!,
@@ -426,11 +510,17 @@ class _EnvieButtonState extends State<_EnvieButton>
   }
 }
 
+// ── _SuggestionCard reçoit le callback ──
 class _SuggestionCard extends StatelessWidget {
   final Activity activity;
   final int rank;
+  final ActivityTapCallback onActivityTap; // ← NOUVEAU
 
-  const _SuggestionCard({required this.activity, required this.rank});
+  const _SuggestionCard({
+    required this.activity,
+    required this.rank,
+    required this.onActivityTap, // ← NOUVEAU
+  });
 
   Color get _rankColor {
     if (rank == 1) return const Color(0xFFD85A30);
@@ -451,108 +541,127 @@ class _SuggestionCard extends StatelessWidget {
     final subTextColor =
         Theme.of(context).colorScheme.onSurface.withOpacity(0.5);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-              color: _rankColor.withOpacity(0.15),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          children: [
-            Positioned(
-                left: 0, top: 0, bottom: 0,
-                child: Container(width: 5, color: _rankColor)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
-              child: Row(
-                children: [
-                  Column(
-                    children: [
-                      Container(
-                        width: 52, height: 52,
-                        decoration: BoxDecoration(
-                          color: _rankColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Center(
-                          child: Text(activity.emoji,
-                              style: const TextStyle(fontSize: 26)),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('#$rank',
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: _rankColor)),
-                    ],
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      // ── TAP SUR LA CARTE → aller sur la Map ──
+      onTap: () => onActivityTap(activity.lat, activity.lng, activity.name),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+                color: _rankColor.withOpacity(0.15),
+                blurRadius: 12,
+                offset: const Offset(0, 4)),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            children: [
+              Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(width: 5, color: _rankColor)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+                child: Row(
+                  children: [
+                    Column(
                       children: [
-                        Text(activity.name,
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: textColor)),
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: _rankColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Center(
+                            child: Text(activity.emoji,
+                                style: const TextStyle(fontSize: 26)),
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(Icons.category_outlined,
-                                size: 12, color: subTextColor),
-                            const SizedBox(width: 4),
-                            Text(activity.category,
-                                style: TextStyle(
-                                    color: subTextColor, fontSize: 12)),
-                            const SizedBox(width: 10),
-                            Text(_budgetLabel,
-                                style: TextStyle(
-                                    color: subTextColor, fontSize: 12)),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: LinearProgressIndicator(
-                                  value: activity.score / 100,
-                                  backgroundColor:
-                                      subTextColor.withOpacity(0.2),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      _rankColor),
-                                  minHeight: 6,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text('${activity.score.toInt()}%',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: _rankColor)),
-                          ],
-                        ),
+                        Text('#$rank',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _rankColor)),
                       ],
                     ),
-                  ),
-                  Icon(Icons.arrow_forward_ios,
-                      size: 14, color: subTextColor),
-                ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(activity.name,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: textColor)),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(Icons.category_outlined,
+                                  size: 12, color: subTextColor),
+                              const SizedBox(width: 4),
+                              Text(activity.category,
+                                  style: TextStyle(
+                                      color: subTextColor, fontSize: 12)),
+                              const SizedBox(width: 10),
+                              Text(_budgetLabel,
+                                  style: TextStyle(
+                                      color: subTextColor, fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: LinearProgressIndicator(
+                                    value: activity.score / 100,
+                                    backgroundColor:
+                                        subTextColor.withOpacity(0.2),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        _rankColor),
+                                    minHeight: 6,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('${activity.score.toInt()}%',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: _rankColor)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Bouton directions → maintenant ouvre la Map interne
+                    GestureDetector(
+                      onTap: () =>
+                          onActivityTap(activity.lat, activity.lng, activity.name),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _rankColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.map_outlined,
+                            color: _rankColor, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -560,7 +669,9 @@ class _SuggestionCard extends StatelessWidget {
 }
 
 class _SuggestionsSection extends StatefulWidget {
-  const _SuggestionsSection();
+  final ActivityTapCallback onActivityTap; // ← NOUVEAU
+
+  const _SuggestionsSection({required this.onActivityTap});
 
   @override
   State<_SuggestionsSection> createState() => _SuggestionsSectionState();
@@ -579,22 +690,21 @@ class _SuggestionsSectionState extends State<_SuggestionsSection> {
   Future<void> _load() async {
     try {
       Position position;
-      try {
-        final permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied ||
-            permission == LocationPermission.deniedForever) {
-          throw Exception('Permission refusée');
-        }
-        position = await Geolocator.getCurrentPosition();
-      } catch (_) {
-        position = Position(
-          latitude: 5.3489, longitude: -4.0712,
-          timestamp: DateTime.now(),
-          accuracy: 0, altitude: 0, heading: 0,
-          speed: 0, speedAccuracy: 0,
-          altitudeAccuracy: 0, headingAccuracy: 0,
-        );
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) throw Exception('GPS désactivé');
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
       }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw Exception('Permission refusée');
+      }
+
+      position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
       final places = await PlacesService.getPlacesAround(
         lat: position.latitude,
@@ -687,7 +797,11 @@ class _SuggestionsSectionState extends State<_SuggestionsSection> {
         ),
         const SizedBox(height: 12),
         ..._recs.asMap().entries.map(
-              (e) => _SuggestionCard(activity: e.value, rank: e.key + 1),
+              (e) => _SuggestionCard(
+                activity: e.value,
+                rank: e.key + 1,
+                onActivityTap: widget.onActivityTap, // ← NOUVEAU
+              ),
             ),
       ],
     );
@@ -695,7 +809,9 @@ class _SuggestionsSectionState extends State<_SuggestionsSection> {
 }
 
 class _ProcheDeToiCard extends StatefulWidget {
-  const _ProcheDeToiCard();
+  final ActivityTapCallback onActivityTap; // ← NOUVEAU
+
+  const _ProcheDeToiCard({required this.onActivityTap});
 
   @override
   State<_ProcheDeToiCard> createState() => _ProcheDeToiCardState();
@@ -706,8 +822,10 @@ class _ProcheDeToiCardState extends State<_ProcheDeToiCard> {
   bool _loading = true;
 
   final List<Color> _colors = const [
-    Color(0xFFD85A30), Color(0xFF6C63FF),
-    Color(0xFFFF9500), Color(0xFF2ECC71),
+    Color(0xFFD85A30),
+    Color(0xFF6C63FF),
+    Color(0xFFFF9500),
+    Color(0xFF2ECC71),
   ];
 
   @override
@@ -720,14 +838,33 @@ class _ProcheDeToiCardState extends State<_ProcheDeToiCard> {
     try {
       Position position;
       try {
-        position = await Geolocator.getCurrentPosition();
+        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) throw Exception('GPS OFF');
+
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          throw Exception('Permission refusée');
+        }
+
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
       } catch (_) {
         position = Position(
-          latitude: 5.3489, longitude: -4.0712,
+          latitude: 5.3489,
+          longitude: -4.0712,
           timestamp: DateTime.now(),
-          accuracy: 0, altitude: 0, heading: 0,
-          speed: 0, speedAccuracy: 0,
-          altitudeAccuracy: 0, headingAccuracy: 0,
+          accuracy: 0,
+          altitude: 0,
+          heading: 0,
+          speed: 0,
+          speedAccuracy: 0,
+          altitudeAccuracy: 0,
+          headingAccuracy: 0,
         );
       }
 
@@ -792,63 +929,72 @@ class _ProcheDeToiCardState extends State<_ProcheDeToiCard> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 130,
+          height: 150,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: _lieux.length,
             itemBuilder: (context, index) {
               final lieu = _lieux[index];
               final color = _colors[index % _colors.length];
-              return Container(
-                width: 130,
-                margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  color: cardColor,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                        color: color.withOpacity(0.15),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4)),
-                  ],
+              return GestureDetector(
+                // ── TAP → aller sur la Map ──
+                onTap: () => widget.onActivityTap(
+                  lieu['lat'] as double,
+                  lieu['lng'] as double,
+                  lieu['name'] as String,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          color: color.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Text(lieu['emoji'],
-                              style: const TextStyle(fontSize: 20)),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(lieu['name'],
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: textColor),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                      const Spacer(),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on, size: 11, color: color),
-                          const SizedBox(width: 2),
-                          Text(lieu['distanceLabel'],
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: color,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
+                child: Container(
+                  width: 130,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                          color: color.withOpacity(0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4)),
                     ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Text(lieu['emoji'],
+                                style: const TextStyle(fontSize: 20)),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(lieu['name'],
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: textColor),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                        const Spacer(),
+                        Row(
+                          children: [
+                            Icon(Icons.map_outlined, size: 11, color: color),
+                            const SizedBox(width: 2),
+                            Text(lieu['distanceLabel'],
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: color,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -878,15 +1024,27 @@ class _BottomNav extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _NavItem(icon: Icons.grid_view_rounded, label: 'Accueil', active: selectedIndex == 0, onTap: () => onItemTap(0)),
-          _NavItem(icon: Icons.calendar_today_outlined, label: 'Calendrier', active: selectedIndex == 1, onTap: () => onItemTap(1)),
+          _NavItem(
+              icon: Icons.grid_view_rounded,
+              label: 'Accueil',
+              active: selectedIndex == 0,
+              onTap: () => onItemTap(0)),
+
+          _NavItem(
+              icon: Icons.calendar_today_outlined,
+              label: 'Calendrier',
+              active: selectedIndex == 1,
+              onTap: () => onItemTap(1)),
+
+          // ── Bouton + ──
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Transform.translate(
                 offset: const Offset(0, -14),
                 child: Container(
-                  width: 48, height: 48,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: const Color(0xFFD85A30),
                     shape: BoxShape.circle,
@@ -894,14 +1052,17 @@ class _BottomNav extends StatelessWidget {
                   ),
                   child: GestureDetector(
                     onTap: () async {
-                      final result = await Navigator.push(context,
+                      final result = await Navigator.push(
+                          context,
                           MaterialPageRoute(
                               builder: (context) => const AddTaskPage()));
+
                       if (result != null) {
                         String task = result["task"];
                         DateTime date = result["date"];
                         final cleanDate =
                             DateTime.utc(date.year, date.month, date.day);
+
                         if (TaskData.tasks[cleanDate] != null) {
                           TaskData.tasks[cleanDate]!
                               .add({"title": task, "done": false});
@@ -910,12 +1071,15 @@ class _BottomNav extends StatelessWidget {
                             {"title": task, "done": false}
                           ];
                         }
+
                         saveTasks();
+
                         NotificationService().scheduleNotification(
-                            id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                            title: "Tâche",
-                            body: task,
-                            dateTime: date);
+                          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                          title: "Tâche",
+                          body: task,
+                          dateTime: date,
+                        );
                       }
                     },
                     child: const Icon(Icons.add, color: Colors.white),
@@ -926,8 +1090,19 @@ class _BottomNav extends StatelessWidget {
                   style: TextStyle(color: textColor, fontSize: 10)),
             ],
           ),
-          _NavItem(icon: Icons.show_chart_outlined, label: 'Stats', active: selectedIndex == 2, onTap: () => onItemTap(2)),
-          _NavItem(icon: Icons.person_outline, label: 'Profil', active: selectedIndex == 3, onTap: () => onItemTap(3)),
+
+          _NavItem(
+              icon: Icons.show_chart_outlined,
+              label: 'Stats',
+              active: selectedIndex == 2,
+              onTap: () => onItemTap(2)),
+
+          // 🔥 ICI C’EST LE PROFILE (REMPLACE MAP)
+          _NavItem(
+              icon: Icons.person_outline,
+              label: 'Profil',
+              active: selectedIndex == 3,
+              onTap: () => onItemTap(3)),
         ],
       ),
     );
@@ -941,7 +1116,10 @@ class _NavItem extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _NavItem(
-      {required this.icon, required this.label, this.active = false, this.onTap});
+      {required this.icon,
+      required this.label,
+      this.active = false,
+      this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -955,7 +1133,8 @@ class _NavItem extends StatelessWidget {
         children: [
           active
               ? Container(
-                  width: 22, height: 22,
+                  width: 22,
+                  height: 22,
                   decoration: BoxDecoration(
                       color: const Color(0xFFD85A30),
                       borderRadius: BorderRadius.circular(6)),
@@ -966,6 +1145,15 @@ class _NavItem extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+Future<void> ouvrirItineraire(double lat, double lng, String nom) async {
+  final url = Uri.parse(
+    'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+  );
+  if (await canLaunchUrl(url)) {
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 }
 

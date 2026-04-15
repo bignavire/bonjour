@@ -308,29 +308,8 @@ class _SignuppageState extends State<Signuppage> {
                         ),
                         const SizedBox(height: 14),
 
-                        // Bouton Apple
-                        Container(
-                          width: double.infinity,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            color: Colors.grey[100],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                  width: 30,
-                                  child: Image.asset(
-                                      "assets/logos/téléchargement (1).png")),
-                              const SizedBox(width: 12),
-                              const Text("Continuer avec Apple",
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
+                        
+                        
                       ],
                     ),
                   ),

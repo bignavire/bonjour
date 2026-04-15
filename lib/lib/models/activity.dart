@@ -17,7 +17,7 @@ class Activity {
     required this.isOutdoor,
     required this.lat,
     required this.lng,
-    required this.emoji,
+    this.emoji = '🎯', // ✅ PLUS OBLIGATOIRE
     this.score = 0,
   });
 }

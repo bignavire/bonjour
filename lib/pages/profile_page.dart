@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gotime/pages/edit_profile_page.dart';
 import 'package:gotime/lib/models/user_preferences.dart';
 import 'package:gotime/main.dart';
+import 'package:gotime/pages/edit_preferences_page.dart';
+import 'package:gotime/notifications_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -130,7 +132,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final email = user?.email ?? '';
     final initiale = nom.isNotEmpty ? nom[0].toUpperCase() : '?';
 
-    // 🌙 Couleurs thème
     final cardColor = Theme.of(context).colorScheme.surface;
     final textColor = Theme.of(context).colorScheme.onSurface;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
@@ -140,7 +141,6 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 🎨 HEADER — gradient fixe, pas besoin de changer
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
@@ -226,7 +226,6 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🎯 PRÉFÉRENCES
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
@@ -283,7 +282,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
                   const SizedBox(height: 14),
 
-                  // ⚙️ ACTIONS
                   Container(
                     decoration: BoxDecoration(
                       color: cardColor,
@@ -309,14 +307,29 @@ class _ProfilePageState extends State<ProfilePage> {
                         _ActionTile(
                           icon: Icons.tune_outlined,
                           label: 'Modifier mes préférences',
-                          onTap: () {},
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) =>
+                                      const EditPreferencesPage()),
+                            );
+                            _loadPrefs();
+                          },
                         ),
                         Divider(height: 1, indent: 56,
                             color: textColor.withOpacity(0.1)),
                         _ActionTile(
                           icon: Icons.notifications_outlined,
                           label: 'Notifications',
-                          onTap: () {},
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) =>
+                                      const NotificationsPage()),
+                            );
+                          },
                         ),
                         Divider(height: 1, indent: 56,
                             color: textColor.withOpacity(0.1)),
@@ -327,7 +340,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
                   const SizedBox(height: 14),
 
-                  // 🚪 DÉCONNEXION
                   GestureDetector(
                     onTap: () async {
                       await FirebaseAuth.instance.signOut();

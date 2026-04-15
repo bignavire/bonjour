@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:gotime/lib/auth_gate.dart';
-import 'theme.dart';
+import 'package:gotime/theme.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
+import 'package:gotime/firebase_options.dart';
 import 'package:gotime/pages/notification_service.dart';
 import 'package:gotime/lib/pages/onboarding_page.dart';
 import 'package:gotime/pages/pageaccueil.dart';
+import 'package:gotime/pages/descriptionPages/first_page.dart';
+import 'package:gotime/pages/landing_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:gotime/forgot_password_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🔥 INIT HIVE (IMPORTANT)
+  await Hive.initFlutter();
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
   await NotificationService().init();
 
   final prefs = await SharedPreferences.getInstance();
@@ -21,7 +29,6 @@ void main() async {
 
   runApp(MyApp(onboardingDone: onboardingDone, isDark: isDark));
 }
-
 class MyApp extends StatefulWidget {
   final bool onboardingDone;
   final bool isDark;
@@ -43,7 +50,6 @@ class _MyAppState extends State<MyApp> {
     _isDark = widget.isDark;
   }
 
-  // 🌙 Toggle dark mode depuis n'importe quelle page
   Future<void> toggleDarkMode() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() => _isDark = !_isDark);
@@ -58,10 +64,14 @@ class _MyAppState extends State<MyApp> {
       darkTheme: AppTheme.darkTheme,
       themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
       debugShowCheckedModeBanner: false,
-      home: widget.onboardingDone ? const AuthGate() : const OnboardingPage(),
+      home: FirstPage(onboardingDone: widget.onboardingDone),
       routes: {
         '/home': (context) => const Pageaccueil(),
         '/onboarding': (context) => const OnboardingPage(),
+        '/landing': (context) => const LandingPage(),
+        '/auth': (context) => const AuthGate(),
+         '/forgot-password': (context) => const ForgotPasswordPage(),
+      
       },
     );
   }
